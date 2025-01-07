@@ -16,29 +16,26 @@ import { createHash } from 'crypto'
 import ffmpeg from 'fluent-ffmpeg'
 
 const uploadS3 = async (filepath, filename) => {
-  const s3 = new S3({
-    endpoint: config.s3.endpoint,
-    accessKeyId: config.s3.key,
-    secretAccessKey: config.s3.secret,
-    signatureVersion: 'v4'
-  })
-  const uploadParams = { Bucket: config.s3.bucket, Key: filename }
-  let url = ''
-  try {
-    await s3.headObject(uploadParams).promise()
-    url = config.s3.site + filename
-  } catch (error) {
-    const fileStream = fs.createReadStream(filepath)
-    fileStream.on('error', function (err) {
-      console.log('File Error', err)
-    })
-    uploadParams.Body = fileStream
-
-    const stored = await s3.upload(uploadParams).promise()
-    url = config.s3.site + stored.key
+  // 确保目录存在
+  const assetsDir = path.join(process.cwd(), 'assets')
+  const targetDir = path.dirname(path.join(assetsDir, filename))
+  
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true })
   }
+
+  // 目标文件路径
+  const targetPath = path.join(assetsDir, filename)
+  
+  // 复制文件
+  await fs.promises.copyFile(filepath, targetPath)
+  // 返回完整的URL，包含baseUrl前缀
+  const url = `${config.app.host}/assets/${filename}`
+  
+  
   return url
 }
+
 export default {
   async index(ctx) {
     success(ctx, {
