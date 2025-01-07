@@ -20,18 +20,30 @@ const uploadS3 = async (filepath, filename) => {
   const assetsDir = path.join(process.cwd(), 'assets')
   const targetDir = path.dirname(path.join(assetsDir, filename))
   
+  console.log('Current working directory:', process.cwd())
+  console.log('Assets directory:', assetsDir)
+  console.log('Target directory:', targetDir)
+  
   if (!fs.existsSync(targetDir)) {
+    console.log('Creating directory:', targetDir)
     fs.mkdirSync(targetDir, { recursive: true })
   }
 
   // 目标文件路径
   const targetPath = path.join(assetsDir, filename)
+  console.log('Target file path:', targetPath)
   
   // 复制文件
   await fs.promises.copyFile(filepath, targetPath)
+  
+  // 验证文件是否存在
+  const exists = fs.existsSync(targetPath)
+  console.log('File exists after copy:', exists)
+  
   // 返回完整的URL，包含baseUrl前缀
   const url = `${config.app.host}/assets/${filename}`
-  
+  console.log('Generated URL:', url)
+  console.log('File is accessible:', fs.existsSync(targetPath))
   
   return url
 }

@@ -4,6 +4,9 @@ import cors from '@koa/cors'
 import bodyParser from 'koa-bodyparser'
 import logger from 'koa-logger'
 import { koaBody } from 'koa-body'
+import path from 'path'
+import fs from 'fs'
+import mime from 'mime-types'
 
 import config from './config/index.js'
 import mongo from './lib/mongo.js'
@@ -15,6 +18,33 @@ const app = new Koa()
 
 // 设置允许跨域请求
 app.use(cors())
+
+// 静态文件目录
+const staticDir = path.join(process.cwd(), 'assets')
+console.log('Static files directory:', staticDir)
+
+// 确保静态文件目录存在
+if (!fs.existsSync(staticDir)) {
+  console.log('Creating static directory:', staticDir)
+  fs.mkdirSync(staticDir, { recursive: true })
+}
+
+// 自定义静态文件中间件
+app.use(async (ctx, next) => {
+  if (ctx.path.startsWith('/assets/')) {
+    const filePath = path.join(staticDir, ctx.path.replace(/^\/assets\//, ''))
+    if (fs.existsSync(filePath)) {
+      const stats = fs.statSync(filePath)
+      if (stats.isFile()) {
+        ctx.type = mime.lookup(filePath) || 'application/octet-stream'
+        ctx.body = fs.createReadStream(filePath)
+        return
+      }
+    }
+  }
+  await next()
+})
+
 // 设置上传文件大小最大限制，默认2M
 app.use(
   koaBody({
@@ -38,7 +68,8 @@ app.use(
       '/api/admin/auth/signin',
       '/api/admin/auth/init',
       /\/api\/public\/*/,
-      /\/api\/oauth\/*/
+      /\/api\/oauth\/*/,
+      /^\/assets\/.*/
     ]
   })
 )
