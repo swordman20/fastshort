@@ -5,7 +5,7 @@ const docker_url = "DEFINE_DOCKER_URL"
 /** 不同请求服务的环境配置 */
 const serviceEnv: ServiceEnv = {
   dev: {
-    url: 'http://localhost:3000/api/admin'
+    url: 'http://localhost:2000/api/admin'
   },
   test: {
     url: 'http://localhost:8080'
