@@ -161,13 +161,35 @@ export default {
   onShow() {
     console.log('回到前台')
     if (this.dataList.length > 0 && this.isHumanClick) {
-      this.playVideo(this.currentPlayer)
+      // 只恢复之前暂停的视频
+      if (this.currentPlayer >= 0 && this.dataList[this.currentPlayer].state === 'pause') {
+        const videoContext = this.getVideoContext(this.currentPlayer)
+        if (videoContext) {
+          this.dataList[this.currentPlayer].state = 'play'
+          videoContext.play()
+          // #ifdef WEB
+          if (audioContext.paused) {
+            audioContext.play()
+          }
+          // #endif
+        }
+      }
     }
   },
   onHide() {
     console.log('到后台')
     if (this.dataList.length > 0 && this.isHumanClick) {
-      this.pauseVideo(this.currentPlayer)
+      // 只暂停正在播放的视频
+      if (this.currentPlayer >= 0 && this.dataList[this.currentPlayer].state === 'play') {
+        const videoContext = this.getVideoContext(this.currentPlayer)
+        if (videoContext) {
+          this.dataList[this.currentPlayer].state = 'pause'
+          videoContext.pause()
+          // #ifdef WEB
+          audioContext.pause()
+          // #endif
+        }
+      }
     }
   },
   methods: {
@@ -186,10 +208,15 @@ export default {
     // 播放当前视频，并预先加载一下一个视频
     playVideo(index) {
       if (index >= 0) {
-        this.dataList[index].state = 'play'
+        // 确保之前的音频被停止
         // #ifdef WEB
-        audioContext.src = this.dataList[index].video[0]
+        if (audioContext.src !== this.dataList[index].video[0]) {
+          audioContext.stop()
+          audioContext.src = this.dataList[index].video[0]
+        }
         // #endif
+
+        this.dataList[index].state = 'play'
         console.log('play: index', index)
         setTimeout(() => {
           this.getVideoContext(index).play()

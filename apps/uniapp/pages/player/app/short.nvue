@@ -246,6 +246,37 @@ export default {
     await this.loadData(option)
     // this.openComment()
   },
+  onUnload() {
+    console.log('页面销毁')
+    // 停止当前播放的视频
+    if (this.currentPlayer >= 0) {
+      this.dataList[this.currentPlayer].state = 'pause'
+      const videoContext = this.getVideoContext(this.currentPlayer)
+      if (videoContext) {
+        videoContext.stop()
+      }
+    }
+    // 清理所有视频上下文
+    this.videoContextList = {}
+    // 重置播放状态
+    this.currentPlayer = -1
+  },
+  onBackPress() {
+    console.log('返回按钮被点击')
+    // 停止当前播放的视频
+    if (this.currentPlayer >= 0) {
+      this.dataList[this.currentPlayer].state = 'pause'
+      const videoContext = this.getVideoContext(this.currentPlayer)
+      if (videoContext) {
+        videoContext.stop()
+      }
+    }
+    // 清理所有视频上下文
+    this.videoContextList = {}
+    // 重置播放状态
+    this.currentPlayer = -1
+    return false
+  },
   methods: {
     // 获取播放器对象的工厂方法
     getVideoContext(index) {
@@ -295,8 +326,9 @@ export default {
         clearTimeout(this.pauseTimer)
         this.pauseTimer = setTimeout(() => {
           const videoContext = this.getVideoContext(index)
-          videoContext.pause()
-          videoContext.seek(0)
+          if (videoContext) {
+            videoContext.stop()
+          }
         }, 500)
       }
     },
