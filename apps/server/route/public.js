@@ -62,47 +62,88 @@ export default {
       const exts = ['jpg', 'jpge', 'jpeg', 'png', 'webp', 'mp4']
       const { filepath, mimetype } = ctx.request.files.file
       const fileExtension = mime.extension(mimetype)
+      
       if (!exts.includes(fileExtension)) {
         fail(ctx, '文件类型错误')
         return
       }
-      console.log(filepath, fileExtension)
+      
+      console.log('Upload file:', filepath, fileExtension)
+      
       // 计算文件的md5
       const buff = fs.readFileSync(filepath)
       const hash = createHash('md5').update(buff).digest('hex')
 
       let url = ''
 
-      if (fileExtension == 'mp4') {
-        // 视频和截图上传
-        const filename = `video/${dayjs().format(
-          'YYYYMMDD'
-        )}/${hash}.${fileExtension}`
-        ffmpeg(filepath)
-          .on('end', async function () {
-            const screenshotfile = `${process.cwd()}/screenshots/${hash}.png`
-            await uploadS3(screenshotfile, filename + '.png')
-            fs.unlinkSync(screenshotfile)
+      try {
+        if (fileExtension === 'mp4') {
+          // 获取视频信息
+          const videoInfo = await new Promise((resolve, reject) => {
+            ffmpeg.ffprobe(filepath, (err, metadata) => {
+              if (err) reject(err)
+              else resolve(metadata)
+            })
           })
-          .screenshots({
-            timestamps: [0],
-            filename: `${hash}.png`,
-            folder: './screenshots'
+
+          // 判断视频方向
+          const isVertical = videoInfo.streams[0].height > videoInfo.streams[0].width
+          
+          // 构建文件名，包含方向信息
+          const orientation = isVertical ? 'vertical' : 'horizontal'
+          const filename = `video/${dayjs().format('YYYYMMDD')}/${orientation}_${hash}.${fileExtension}`
+          
+          // 确保视频目录存在
+          const videoDir = path.join(process.cwd(), 'assets/video', dayjs().format('YYYYMMDD'))
+          if (!fs.existsSync(videoDir)) {
+            fs.mkdirSync(videoDir, { recursive: true })
+          }
+          
+          // 确保截图目录存在
+          const screenshotDir = path.join(process.cwd(), 'assets/screenshots')
+          if (!fs.existsSync(screenshotDir)) {
+            fs.mkdirSync(screenshotDir, { recursive: true })
+          }
+
+          // 处理视频截图
+          await new Promise((resolve, reject) => {
+            ffmpeg(filepath)
+              .on('end', async function () {
+                resolve()
+              })
+              .on('error', function(err) {
+                console.error('Screenshot error:', err)
+                resolve() // 即使截图失败也继续
+              })
+              .screenshots({
+                timestamps: [0],
+                filename: `${hash}.png`,
+                folder: screenshotDir
+              })
           })
-        url = await uploadS3(filepath, filename)
-      } else {
-        // 头像或者图片上传
-        const filename = `avatar/${dayjs().format(
-          'YYYYMMDD'
-        )}/${hash}.${fileExtension}`
-        url = await uploadS3(filepath, filename)
+
+          // 复制视频文件
+          await fs.promises.copyFile(filepath, path.join(process.cwd(), 'assets', filename))
+          url = `${config.app.host}/assets/${filename}`
+        } else {
+          // 头像或者图片上传
+          const filename = `avatar/${dayjs().format('YYYYMMDD')}/${hash}.${fileExtension}`
+          url = await uploadS3(filepath, filename)
+        }
+
+        // 删除临时文件
+        fs.unlinkSync(filepath)
+
+        success(ctx, {
+          url,
+          key: hash
+        })
+      } catch (error) {
+        console.error('Upload processing error:', error)
+        throw error
       }
-      success(ctx, {
-        url,
-        key: hash
-      })
     } catch (error) {
-      console.log(error)
+      console.error('Upload error:', error)
       fail(ctx, error.message)
     }
   },
@@ -208,14 +249,21 @@ export default {
     const recommend = await mongo
       .col('series')
       .find()
-      // .find({
-      //   recommend: {
-      //     $gt: 0
-      //   }
-      // })
-      // .sort({ recommend: -1 })
       .limit(10)
       .toArray()
+
+    // 替换所有图片 URL 中的 localhost 为实际 IP
+    const replaceUrls = (data) => {
+      if (Array.isArray(data.cover)) {
+        data.cover = data.cover.map(url => 
+          url.replace('http://localhost:2000', config.app.host)
+        )
+      }
+      return data
+    }
+
+    // 处理推荐数据
+    const processedRecommend = recommend.map(replaceUrls)
 
     const category = await mongo
       .col('category')
@@ -223,6 +271,7 @@ export default {
         pass: true
       })
       .toArray()
+
     const categorys = []
     for (const cat of category) {
       const series = await mongo
@@ -232,10 +281,14 @@ export default {
         })
         .limit(10)
         .toArray()
-      if (series.length > 0) {
+
+      // 处理分类数据
+      const processedSeries = series.map(replaceUrls)
+
+      if (processedSeries.length > 0) {
         categorys.push({
           name: cat.name,
-          series
+          series: processedSeries
         })
       }
     }
@@ -248,7 +301,15 @@ export default {
       .sort({ createdAt: -1 })
       .limit(10)
       .toArray()
-    const data = { recommend, categorys, release }
+
+    // 处理最新发布数据
+    const processedRelease = release.map(replaceUrls)
+
+    const data = { 
+      recommend: processedRecommend, 
+      categorys, 
+      release: processedRelease 
+    }
     success(ctx, data)
   },
 
